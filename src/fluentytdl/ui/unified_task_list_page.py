@@ -26,6 +26,7 @@ from qfluentwidgets import (
 
 from .delegates.download_item_delegate import DownloadItemDelegate
 from .models.download_list_model import DownloadListModel
+from .task_count_badges import TASK_COUNT_LABELS, build_task_count_badges
 
 
 class DownloadFilterProxyModel(QSortFilterProxyModel):
@@ -109,6 +110,10 @@ class UnifiedTaskListPage(QWidget):
         self.model.rowsInserted.connect(self._update_empty_state)
         self.model.rowsRemoved.connect(self._update_empty_state)
         self.model.modelReset.connect(self._update_empty_state)
+        self.model.rowsInserted.connect(self._update_count_badges)
+        self.model.rowsRemoved.connect(self._update_count_badges)
+        self.model.modelReset.connect(self._update_count_badges)
+        self.model.dataChanged.connect(self._update_count_badges)
 
         # Connect proxy model signals as well, ensuring filter changes trigger updates
         self.proxy_model.rowsInserted.connect(self._update_empty_state)
@@ -117,6 +122,7 @@ class UnifiedTaskListPage(QWidget):
 
         # force initial empty state
         self._update_empty_state()
+        self._update_count_badges()
 
         # Delegate signals
         self.delegate.delete_clicked.connect(self._on_delegate_delete)
@@ -179,13 +185,8 @@ class UnifiedTaskListPage(QWidget):
         self.header_layout.setContentsMargins(0, 0, 0, 0)
 
         self.pivot = SegmentedWidget(self)
-        self.pivot.addItem(routeKey="all", text="全部任务")
-        self.pivot.addItem(routeKey="running", text="下载中")
-        self.pivot.addItem(routeKey="queued", text="排队中")
-        self.pivot.addItem(routeKey="paused", text="已暂停")
-        self.pivot.addItem(routeKey="quality_guard", text="质量守卫")
-        self.pivot.addItem(routeKey="completed", text="已完成")
-        self.pivot.addItem(routeKey="error", text="已失败")
+        for route_key, text in TASK_COUNT_LABELS.items():
+            self.pivot.addItem(routeKey=route_key, text=text)
         self.pivot.currentItemChanged.connect(self._on_pivot_changed)
         self.pivot.setCurrentItem("all")
 
@@ -341,6 +342,27 @@ class UnifiedTaskListPage(QWidget):
                     self.concurrent_box.setCurrentIndex(index_target)
             except (ValueError, TypeError):
                 pass
+
+    def _set_pivot_text(self, route_key: str, text: str) -> None:
+        if hasattr(self.pivot, "setItemText"):
+            try:
+                self.pivot.setItemText(route_key, text)
+                return
+            except Exception:
+                pass
+
+        items = getattr(self.pivot, "items", None)
+        item = items.get(route_key) if isinstance(items, dict) else None
+        if item is not None and hasattr(item, "setText"):
+            item.setText(text)
+
+    def _update_count_badges(self, *args: Any) -> None:
+        """Refresh compact counts embedded in the filter tabs."""
+
+        if not hasattr(self, "pivot"):
+            return
+        for route_key, text in build_task_count_badges(self.model.get_counts_by_state()).items():
+            self._set_pivot_text(route_key, text)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

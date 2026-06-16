@@ -384,6 +384,19 @@ def ydl_opts_to_cli_args(ydl_opts: dict[str, Any]) -> list[str]:
         if isinstance(v, (int, float)) and int(v) > 0:
             args += [flag, str(int(v))]
 
+    playlist_items = ydl_opts.get("playlist_items")
+    if isinstance(playlist_items, str) and playlist_items.strip():
+        args += ["--playlist-items", playlist_items.strip()]
+    else:
+        for key in ("playlistend", "playlist_end"):
+            playlist_end = ydl_opts.get(key)
+            if isinstance(playlist_end, (int, float)) and int(playlist_end) > 0:
+                args += ["--playlist-end", str(int(playlist_end))]
+                break
+
+    if ydl_opts.get("noplaylist"):
+        args += ["--no-playlist"]
+
     # 外部下载器
     external_downloader = ydl_opts.get("external_downloader")
     if isinstance(external_downloader, str) and external_downloader:

@@ -382,10 +382,10 @@ class PlaylistItemDelegate(QStyledItemDelegate):
             fg = colors["error_fg"]
             text = "错误"
         elif task.custom_options.format is None:
-            # Not yet enqueued – show neutral "待加载" badge
+            # Not yet enqueued - show an explicit manual action.
             bg = QColor(255, 255, 255, 6) if is_dark else QColor(0, 0, 0, 5)
             fg = colors["muted_fg"]
-            text = "待加载"
+            text = "补全详情"
         else:
             # Loaded: keep the visual transition subtle to reduce perceptual flashing.
             bg = QColor(colors["btn_subtle_bg"])

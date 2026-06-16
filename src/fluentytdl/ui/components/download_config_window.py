@@ -46,11 +46,13 @@ from ...utils.filesystem import sanitize_filename
 from ...utils.image_loader import get_image_loader
 from ...utils.logger import logger
 from ...utils.paths import resource_path
+from ...youtube.single_video_guard import force_single_video_download
 from ...youtube.youtube_service import YoutubeServiceOptions
 from ..delegates.playlist_delegate import PlaylistItemDelegate
 from ..dialogs.playlist_subtitle_dialog import PlaylistSubtitleConfigDialog
 from ..dialogs.subtitle_picker_dialog import SubtitlePickerDialog, SubtitlePickerResult
 from ..models.playlist_model import PlaylistListModel
+from ..playlist_selection_priority import should_auto_enqueue_playlist_details
 from ..playlist_scheduler import PlaylistScheduler
 from .cover_selector import CoverSelectorWidget
 from .format_selector import VideoFormatSelectorWidget
@@ -406,9 +408,7 @@ class DownloadConfigWindow(FramelessWindow):
         self._scroll_throttle_timer.timeout.connect(self._on_scroll_throttled)
 
         self._last_interaction = time.monotonic()
-        self._lazy_paused: bool = (
-            False  # 用户手动暂停后台解析（初始缓存值，实际状态在 scheduler 中）
-        )
+        self._lazy_paused: bool = True
         self._scheduler: PlaylistScheduler | None = None  # 播放列表调度器（build 完成后创建）
 
         self._idle_timer = QTimer(self)
@@ -1862,7 +1862,7 @@ class DownloadConfigWindow(FramelessWindow):
         self.progressRing.setFixedSize(16, 16)
         self.progressRing.hide()
 
-        self.progressLabel = CaptionLabel("详情补全：0/0", self.contentWidget)
+        self.progressLabel = CaptionLabel("已补全详情：0/0", self.contentWidget)
         header_row.addStretch(1)
         header_row.addWidget(self.progressRing)
         header_row.addWidget(self.progressLabel)
@@ -1876,6 +1876,10 @@ class DownloadConfigWindow(FramelessWindow):
         self.selectAllBtn = PushButton("全选", self.contentWidget)
         self.unselectAllBtn = PushButton("取消", self.contentWidget)
         self.invertSelectBtn = PushButton("反选", self.contentWidget)
+        self.fillSelectedDetailsBtn = PushButton("勾选补全", self.contentWidget)
+        self.fillSelectedDetailsBtn.setToolTip("只为当前已勾选的视频补全可选清晰度")
+        self.fillAllDetailsBtn = PushButton("全部补全详情", self.contentWidget)
+        self.fillAllDetailsBtn.setToolTip("为当前播放列表所有视频获取可选清晰度")
 
         self.applyPresetBtn = PrimaryPushButton("重新套用预设", self.contentWidget)
 
@@ -1910,6 +1914,8 @@ class DownloadConfigWindow(FramelessWindow):
         toolbar.addWidget(self.selectAllBtn)
         toolbar.addWidget(self.unselectAllBtn)
         toolbar.addWidget(self.invertSelectBtn)
+        toolbar.addWidget(self.fillSelectedDetailsBtn)
+        toolbar.addWidget(self.fillAllDetailsBtn)
 
         toolbar.addSpacing(16)
 
@@ -1977,6 +1983,8 @@ class DownloadConfigWindow(FramelessWindow):
         self.selectAllBtn.clicked.connect(self._select_all)
         self.unselectAllBtn.clicked.connect(self._unselect_all)
         self.invertSelectBtn.clicked.connect(self._invert_select)
+        self.fillSelectedDetailsBtn.clicked.connect(self._fill_selected_playlist_details)
+        self.fillAllDetailsBtn.clicked.connect(self._fill_all_playlist_details)
         self.applyPresetBtn.clicked.connect(self._apply_preset_to_selected)
 
         # fill rows in chunks
@@ -2101,8 +2109,11 @@ class DownloadConfigWindow(FramelessWindow):
         self._setup_scheduler()
         self._thumb_init_timer.start()
         self._ensure_download_dir_bar()
-        QTimer.singleShot(50, self._initial_viewport_scan)
-        QTimer.singleShot(200, lambda: self._scheduler.start_crawl() if self._scheduler else None)
+        if should_auto_enqueue_playlist_details():
+            QTimer.singleShot(50, self._initial_viewport_scan)
+            QTimer.singleShot(
+                200, lambda: self._scheduler.start_crawl() if self._scheduler else None
+            )
 
     def _setup_scheduler(self) -> None:
         """创建 PlaylistScheduler，接管所有详情抓取调度逻辑。"""
@@ -2284,6 +2295,10 @@ class DownloadConfigWindow(FramelessWindow):
         if self._scheduler is None:
             return
         if not self._scheduler.is_loaded(row):
+            if self._scheduler.is_pending(row):
+                return
+            self._scheduler.lazy_paused = False
+            self._lazy_paused = False
             aw = self._action_widget_by_row.get(row)
             if aw is not None:
                 aw.set_loading(True, "获取中...")
@@ -2398,7 +2413,7 @@ class DownloadConfigWindow(FramelessWindow):
                 aw.qualityButton.setText("音频(自动)")
                 aw.infoLabel.setText("待解析大小")
                 return
-            aw.set_loading(True, "待加载")
+            aw.set_loading(False, "补全详情")
             aw.infoLabel.setText("")
             return
 
@@ -2695,6 +2710,30 @@ class DownloadConfigWindow(FramelessWindow):
         if task is not None and task.is_parsing != is_parsing:
             task.is_parsing = is_parsing
             self._schedule_playlist_row_update(row)
+        self._refresh_progress_label()
+
+    def _fill_all_playlist_details(self) -> None:
+        if self._scheduler is None:
+            return
+        self._scheduler.lazy_paused = False
+        self._lazy_paused = False
+        self._scheduler.start_crawl()
+        self._refresh_progress_label()
+
+    def _fill_selected_playlist_details(self) -> None:
+        if self._scheduler is None:
+            return
+        self._scheduler.lazy_paused = False
+        self._lazy_paused = False
+        for row, data in enumerate(self._playlist_rows):
+            if not data.get("selected"):
+                continue
+            if self._scheduler.is_loaded(row) or self._scheduler.is_failed(row):
+                continue
+            if self._scheduler.is_pending(row):
+                continue
+            self._scheduler.enqueue_foreground(row)
+        self._refresh_progress_label()
 
     def _schedule_deferred_parsing_indicator(self, row: int) -> None:
         """Show '解析中…' only if the extraction hasn't completed within 800ms.
@@ -2774,7 +2813,8 @@ class DownloadConfigWindow(FramelessWindow):
         if self._is_closing or self._scheduler is None:
             return
         first, last = self._visible_row_range()
-        self._scheduler.set_viewport(first, last)
+        if should_auto_enqueue_playlist_details():
+            self._scheduler.set_viewport(first, last)
         self._load_thumbs_for_visible_rows()
 
     def _on_list_item_clicked(self, index: QModelIndex) -> None:
@@ -3003,7 +3043,7 @@ class DownloadConfigWindow(FramelessWindow):
             and not self._scheduler.is_failed(i)
         ]
         if pending:
-            self.yesButton.setText(f"下载（剩余 {len(pending)} 个解析中...）")
+            self.yesButton.setText(f"下载（剩余 {len(pending)} 个未补全）")
         else:
             self.yesButton.setText("下载")
 
@@ -3011,10 +3051,17 @@ class DownloadConfigWindow(FramelessWindow):
         if hasattr(self, "progressLabel"):
             total = len(self._playlist_rows)
             done = self._scheduler.done_count() if self._scheduler is not None else 0
-            self.progressLabel.setText(f"详情补全：{done}/{total}")
+            self.progressLabel.setText(f"已补全详情：{done}/{total}")
             try:
                 if hasattr(self, "progressRing"):
-                    self.progressRing.setVisible(done < total)
+                    active = bool(
+                        self._scheduler is not None
+                        and (
+                            self._scheduler.is_crawl_active
+                            or any(self._scheduler.is_pending(row) for row in range(total))
+                        )
+                    )
+                    self.progressRing.setVisible(active)
             except Exception:
                 pass
 
@@ -3140,7 +3187,7 @@ class DownloadConfigWindow(FramelessWindow):
             return
         if time.monotonic() - self._last_interaction < 2.0:
             return
-        if not self._scheduler.is_crawl_active:
+        if should_auto_enqueue_playlist_details() and not self._scheduler.is_crawl_active:
             self._scheduler.start_crawl()
 
     def _on_lazy_pause_changed(self, checked: bool) -> None:
@@ -3154,8 +3201,9 @@ class DownloadConfigWindow(FramelessWindow):
         if checked:
             self._scheduler.stop_crawl()
         else:
-            self._initial_viewport_scan()
-            self._scheduler.start_crawl()
+            if should_auto_enqueue_playlist_details():
+                self._initial_viewport_scan()
+                self._scheduler.start_crawl()
 
     def _open_row_format_picker(self, row: int) -> None:
         if not (0 <= row < len(self._playlist_rows)):
@@ -3566,6 +3614,7 @@ class DownloadConfigWindow(FramelessWindow):
             url = str(row_data.get("url"))
             title = str(row_data.get("title"))
             thumb = str(row_data.get("thumbnail"))
+            video_id = str(row_data.get("id") or "")
 
             row_opts = {}
 
@@ -3601,6 +3650,7 @@ class DownloadConfigWindow(FramelessWindow):
                                 if pl_sub_override.output_format:
                                     row_opts["convertsubtitles"] = pl_sub_override.output_format
 
+                url, row_opts, _ = force_single_video_download(url, row_opts, video_id)
                 self._apply_download_dir_to_opts(row_opts)
                 tasks.append((f"[字幕] {title}", url, row_opts, thumb))
                 continue
@@ -3633,6 +3683,8 @@ class DownloadConfigWindow(FramelessWindow):
                     safe_title = sanitize_filename(title)
                     row_opts["outtmpl"] = f"{safe_title}.%(ext)s"
 
+                if not row_opts.get("__fluentytdl_is_cover_direct"):
+                    url, row_opts, _ = force_single_video_download(url, row_opts, video_id)
                 self._apply_download_dir_to_opts(row_opts)
                 tasks.append((f"[封面] {title}", url, row_opts, thumb))
                 continue
@@ -3816,6 +3868,7 @@ class DownloadConfigWindow(FramelessWindow):
                             if pl_sub_override.output_format:
                                 row_opts["convertsubtitles"] = pl_sub_override.output_format
 
+            url, row_opts, _ = force_single_video_download(url, row_opts, video_id)
             self._apply_download_dir_to_opts(row_opts)
 
             # === Quality Guard Pre-flight Check (Playlist/Channel) ===

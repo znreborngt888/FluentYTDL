@@ -13,6 +13,7 @@ from ..core.config_manager import config_manager
 from ..storage.db_writer import db_writer
 from ..storage.task_db import task_db
 from ..utils.logger import logger
+from ..youtube.single_video_guard import force_single_video_download
 from .workers import DownloadWorker
 
 
@@ -48,6 +49,11 @@ class DownloadManager(QObject):
                 pass  # 将在下方创建 Worker 壳
 
             opts = json.loads(row.get("ydl_opts_json", "{}"))
+            row_url = str(row.get("url") or "")
+            if "watch?" in row_url and "list=" in row_url:
+                row_url, opts, changed = force_single_video_download(row_url, opts)
+                if changed:
+                    task_db.update_task_download_request(row["id"], row_url, opts)
 
             # skip_download 任务（纯字幕/封面提取）不应跨会话恢复：
             # 它们依赖的弹窗上下文（SubtitlePickerResult 等）已丢失，
@@ -59,7 +65,7 @@ class DownloadManager(QObject):
                 continue
 
             # 如果重启前是运行、解析或排队状态，一律自动降级为暂停，不自动恢复下载
-            if state in ("running", "downloading", "parsing", "queued"):
+            if state in ("running", "downloading", "parsing", "processing", "queued"):
                 state = "paused"
                 task_db.update_task_status(
                     row["id"], state, row.get("progress", 0.0), "⏸️ 下载已暂停 (应用重启)"
@@ -69,7 +75,7 @@ class DownloadManager(QObject):
             if state == "error":
                 cached = {"title": row.get("title", ""), "thumbnail": row.get("thumbnail_url", "")}
                 worker = self.create_worker(
-                    row["url"], opts, cached_info=cached, restore_db_id=row["id"]
+                    row_url, opts, cached_info=cached, restore_db_id=row["id"]
                 )
                 worker._final_state = "error"
                 worker.progress_val = row.get("progress", 0.0)
@@ -82,7 +88,7 @@ class DownloadManager(QObject):
             cached = {"title": row.get("title", ""), "thumbnail": row.get("thumbnail_url", "")}
 
             worker = self.create_worker(
-                row["url"], opts, cached_info=cached, restore_db_id=row["id"]
+                row_url, opts, cached_info=cached, restore_db_id=row["id"]
             )
 
             # 手工同步 Worker 上下文使其与 DB 呈现一致
@@ -156,6 +162,9 @@ class DownloadManager(QObject):
         cached_info: dict[str, Any] | None = None,
         restore_db_id: int = 0,
     ) -> DownloadWorker:
+        if "watch?" in str(url) and "list=" in str(url):
+            url, opts, _ = force_single_video_download(str(url), opts)
+
         worker = DownloadWorker(url, opts, cached_info=cached_info)
 
         # 1. 登记入库，建立 Worker 的持久化主键

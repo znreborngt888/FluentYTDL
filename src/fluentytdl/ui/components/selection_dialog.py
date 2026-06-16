@@ -50,9 +50,14 @@ from ...utils.container_compat import (
 from ...utils.filesystem import sanitize_filename
 from ...utils.image_loader import ImageLoader
 from ...utils.logger import logger
+from ...youtube.single_video_guard import force_single_video_download
 from ...youtube.youtube_service import YoutubeServiceOptions, YtDlpAuthOptions
 from ..delegates.playlist_delegate import PlaylistItemDelegate
 from ..models.playlist_model import PlaylistListModel, PlaylistModelRoles
+from ..playlist_selection_priority import (
+    selected_pending_detail_rows,
+    should_auto_enqueue_playlist_details,
+)
 from .cover_selector import CoverSelectorWidget
 from .format_selector import VideoFormatSelectorWidget
 from .subtitle_selector import SubtitleSelectorWidget
@@ -447,8 +452,8 @@ class PlaylistActionWidget(QWidget):
         self.loadingRing.setFixedSize(14, 14)
         self.loadingRing.hide()
 
-        self.qualityButton = PushButton("待加载", self)
-        self.qualityButton.setToolTip("点击获取信息/选择格式")
+        self.qualityButton = PushButton("补全详情", self)
+        self.qualityButton.setToolTip("点击补全详情/选择格式")
         self.qualityButton.installEventFilter(
             ToolTipFilter(self.qualityButton, showDelay=300, position=ToolTipPosition.BOTTOM)
         )
@@ -1533,7 +1538,7 @@ class SelectionDialog(MessageBoxBase):
         self.progressRing.setFixedSize(16, 16)
         self.progressRing.hide()
 
-        self.progressLabel = CaptionLabel("详情补全：0/0", self.contentWidget)
+        self.progressLabel = CaptionLabel("已补全详情：0/0", self.contentWidget)
         header_row.addStretch(1)
         header_row.addWidget(self.progressRing)
         header_row.addWidget(self.progressLabel)
@@ -1547,6 +1552,8 @@ class SelectionDialog(MessageBoxBase):
         self.selectAllBtn = PushButton("全选", self.contentWidget)
         self.unselectAllBtn = PushButton("取消", self.contentWidget)
         self.invertSelectBtn = PushButton("反选", self.contentWidget)
+        self.fillAllDetailsBtn = PushButton("全部补全详情", self.contentWidget)
+        self.fillAllDetailsBtn.setToolTip("为当前播放列表所有视频获取可选清晰度")
 
         self.applyPresetBtn = PrimaryPushButton("重新套用预设", self.contentWidget)
 
@@ -1578,6 +1585,7 @@ class SelectionDialog(MessageBoxBase):
         toolbar.addWidget(self.selectAllBtn)
         toolbar.addWidget(self.unselectAllBtn)
         toolbar.addWidget(self.invertSelectBtn)
+        toolbar.addWidget(self.fillAllDetailsBtn)
         toolbar.addSpacing(10)
         toolbar.addWidget(CaptionLabel("下载类型:", self.contentWidget))
         toolbar.addWidget(self.type_combo)
@@ -1635,6 +1643,7 @@ class SelectionDialog(MessageBoxBase):
         self.selectAllBtn.clicked.connect(self._select_all)
         self.unselectAllBtn.clicked.connect(self._unselect_all)
         self.invertSelectBtn.clicked.connect(self._invert_select)
+        self.fillAllDetailsBtn.clicked.connect(self._fill_all_playlist_details)
         self.applyPresetBtn.clicked.connect(self._apply_preset_to_selected)
 
         # fill model in chunks (first chunk is synchronous for immediate feedback)
@@ -1786,11 +1795,12 @@ class SelectionDialog(MessageBoxBase):
 
         self._ensure_download_dir_bar()
 
-        # Trigger viewport priority scan after layout settles
-        QTimer.singleShot(50, self._initial_viewport_scan)
+        if should_auto_enqueue_playlist_details():
+            # Trigger viewport priority scan after layout settles
+            QTimer.singleShot(50, self._initial_viewport_scan)
 
-        # Start background crawl to progressively enqueue all rows
-        QTimer.singleShot(200, self._start_background_crawl)
+            # Start background crawl to progressively enqueue all rows
+            QTimer.singleShot(200, self._start_background_crawl)
 
     def _on_playlist_row_checked(self, row: int, checked: bool) -> None:
         # Legacy callback for QCheckBox widgets (no longer wired in MV mode).
@@ -1805,6 +1815,8 @@ class SelectionDialog(MessageBoxBase):
         if not (0 <= row < len(self._playlist_rows)):
             return
         if row not in self._detail_loaded:
+            if self._is_row_parsing(row):
+                return
             # Re-enqueue with high priority so it runs next
             aw = self._action_widget_by_row.get(row)
             if aw is not None:
@@ -1812,6 +1824,7 @@ class SelectionDialog(MessageBoxBase):
             if self._extract_manager is not None:
                 url = str(self._playlist_rows[row].get("url") or "")
                 if url:
+                    self._set_row_parsing(row, True)
                     self._extract_manager.enqueue(
                         str(row),
                         url,
@@ -2160,6 +2173,7 @@ class SelectionDialog(MessageBoxBase):
         if task is not None and task.is_parsing != is_parsing:
             task.is_parsing = is_parsing
             self._playlist_model.dataChanged.emit(idx, idx, [PlaylistModelRoles.TaskObjectRole])
+        self._refresh_progress_label()
 
     def _initial_viewport_scan(self) -> None:
         """Called once after the list view is laid out to prioritize initially visible rows."""
@@ -2294,6 +2308,46 @@ class SelectionDialog(MessageBoxBase):
                 task.selected = new_val
                 self._playlist_model.dataChanged.emit(idx, idx, [PlaylistModelRoles.TaskObjectRole])
         self._update_download_btn_state()
+
+    def _enqueue_detail_rows(self, rows: list[int], *, high_priority: bool) -> int:
+        if self._extract_manager is None:
+            return 0
+        enqueued = 0
+        for row in rows:
+            if row in self._detail_loaded or self._is_row_parsing(row):
+                continue
+            url = str(self._playlist_rows[row].get("url") or "")
+            if not url:
+                continue
+            self._set_row_parsing(row, True)
+            self._extract_manager.enqueue(
+                str(row),
+                url,
+                self._current_options,
+                self._vr_mode,
+                high_priority=high_priority,
+            )
+            enqueued += 1
+        self._refresh_progress_label()
+        return enqueued
+
+    def _enqueue_selected_pending_details(self, *, limit: int = 12) -> None:
+        """Prioritize selected playlist rows after an explicit wait request."""
+
+        rows = selected_pending_detail_rows(self._playlist_rows, self._detail_loaded, limit=limit)
+        self._enqueue_detail_rows(rows, high_priority=True)
+
+    def _fill_all_playlist_details(self) -> None:
+        """Explicit user action: fetch details for every unloaded playlist row."""
+
+        self._enqueue_detail_rows(list(range(len(self._playlist_rows))), high_priority=False)
+
+    def _is_row_parsing(self, row: int) -> bool:
+        if self._playlist_model is None:
+            return False
+        idx = self._playlist_model.index(row, 0)
+        task = self._playlist_model.get_task(idx)
+        return bool(task is not None and task.is_parsing)
 
     def _enqueue_all_for_extraction(self) -> None:
         """Connect extraction signals and handle cover-mode bypass.
@@ -2531,7 +2585,7 @@ class SelectionDialog(MessageBoxBase):
         selected_rows = [i for i, r in enumerate(self._playlist_rows) if r.get("selected")]
         pending = [i for i in selected_rows if i not in self._detail_loaded]
         if pending:
-            self.yesButton.setText(f"下载（剩余 {len(pending)} 个解析中...）")
+            self.yesButton.setText(f"下载（剩余 {len(pending)} 个未补全）")
         else:
             self.yesButton.setText("下载")
 
@@ -2539,10 +2593,11 @@ class SelectionDialog(MessageBoxBase):
         if hasattr(self, "progressLabel"):
             total = len(self._playlist_rows)
             done = len(self._detail_loaded)
-            self.progressLabel.setText(f"详情补全：{done}/{total}")
+            self.progressLabel.setText(f"已补全详情：{done}/{total}")
             try:
                 if hasattr(self, "progressRing"):
-                    self.progressRing.setVisible(done < total)
+                    active = any(self._is_row_parsing(row) for row in range(total))
+                    self.progressRing.setVisible(active)
             except Exception:
                 pass
 
@@ -2933,6 +2988,7 @@ class SelectionDialog(MessageBoxBase):
             url = str(row_data.get("url"))
             title = str(row_data.get("title"))
             thumb = str(row_data.get("thumbnail"))
+            video_id = str(row_data.get("id") or "")
 
             # Base opts
             row_opts: dict[str, Any] = {}
@@ -2990,6 +3046,7 @@ class SelectionDialog(MessageBoxBase):
                     else:
                         row_opts["format"] = "bestvideo+bestaudio/best"
 
+            url, row_opts, _ = force_single_video_download(url, row_opts, video_id)
             self._apply_download_dir_to_opts(row_opts)
             tasks.append((title, url, row_opts, thumb))
 
@@ -3090,26 +3147,16 @@ class SelectionDialog(MessageBoxBase):
                 pending = [i for i in selected_rows if i not in self._detail_loaded]
                 if pending:
                     box = MessageBox(
-                        "仍在解析中",
-                        f"还有 {len(pending)} 个已勾选条目正在补全信息。\n\n"
-                        "你可以继续下载（将按当前预设策略执行），或等待补全完成后再下载。",
+                        "详情未补全",
+                        f"还有 {len(pending)} 个已勾选条目没有补全清晰度详情。\n\n"
+                        "你可以继续下载（将按当前预设策略执行），或先补全详情后再下载。",
                         parent=self,
                     )
                     box.yesButton.setText("继续下载")
-                    box.cancelButton.setText("等待补全")
+                    box.cancelButton.setText("补全所选详情")
                     if not box.exec():
                         # User wants to wait – re-enqueue pending rows with high priority
-                        if self._extract_manager is not None:
-                            for r in pending[:6]:
-                                url = str(self._playlist_rows[r].get("url") or "")
-                                if url:
-                                    self._extract_manager.enqueue(
-                                        str(r),
-                                        url,
-                                        self._current_options,
-                                        self._vr_mode,
-                                        high_priority=True,
-                                    )
+                        self._enqueue_selected_pending_details(limit=12)
                         return
             tasks = self._build_playlist_tasks()
             if not tasks:

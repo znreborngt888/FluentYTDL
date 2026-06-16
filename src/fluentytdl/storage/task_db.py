@@ -183,6 +183,21 @@ class TaskDB:
             )
             self._conn.commit()
 
+    def update_task_download_request(self, task_id: int, url: str, ydl_opts: dict[str, Any]):
+        """Update a persisted download request without touching progress/status."""
+        now = time.time()
+        opts_json = json.dumps(ydl_opts, ensure_ascii=False)
+        with self._write_lock:
+            self._conn.execute(
+                """
+                UPDATE tasks
+                SET url = ?, ydl_opts_json = ?, updated_at = ?
+                WHERE id = ?
+            """,
+                (url, opts_json, now, task_id),
+            )
+            self._conn.commit()
+
     def update_task_quality(
         self, task_id: int, actual_height: int, target_height: int, deviation: str
     ) -> None:
