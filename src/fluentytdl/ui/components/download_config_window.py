@@ -46,6 +46,7 @@ from ...utils.filesystem import sanitize_filename
 from ...utils.image_loader import get_image_loader
 from ...utils.logger import logger
 from ...utils.paths import resource_path
+from ...youtube.sequence_outtmpl import numbered_outtmpl
 from ...youtube.single_video_guard import force_single_video_download
 from ...youtube.youtube_service import YoutubeServiceOptions
 from ..delegates.playlist_delegate import PlaylistItemDelegate
@@ -3602,6 +3603,9 @@ class DownloadConfigWindow(FramelessWindow):
                     vr_preset_args = p[4]
                     break
 
+        selected_video_total = sum(1 for row in self._playlist_rows if row.get("selected"))
+        video_sequence = 0
+
         for _i, row_data in enumerate(self._playlist_rows):
             if _i > 0 and _i % 20 == 0:
                 from PySide6.QtWidgets import QApplication
@@ -3939,6 +3943,8 @@ class DownloadConfigWindow(FramelessWindow):
                         self._preflight_warnings = []
                     self._preflight_warnings.append((title, verdict))
 
+            video_sequence += 1
+            row_opts["outtmpl"] = numbered_outtmpl(video_sequence, selected_video_total)
             tasks.append((title, url, row_opts, thumb))
 
         return tasks

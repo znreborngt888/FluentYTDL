@@ -50,6 +50,7 @@ from ...utils.container_compat import (
 from ...utils.filesystem import sanitize_filename
 from ...utils.image_loader import ImageLoader
 from ...utils.logger import logger
+from ...youtube.sequence_outtmpl import numbered_outtmpl
 from ...youtube.single_video_guard import force_single_video_download
 from ...youtube.youtube_service import YoutubeServiceOptions, YtDlpAuthOptions
 from ..delegates.playlist_delegate import PlaylistItemDelegate
@@ -2980,6 +2981,9 @@ class SelectionDialog(MessageBoxBase):
             return tasks
 
         # 2. Playlist Mode (Existing Logic)
+        selected_video_total = sum(1 for row in self._playlist_rows if row.get("selected"))
+        video_sequence = 0
+
         for _i, row_data in enumerate(self._playlist_rows):
             if not row_data.get("selected"):
                 continue
@@ -3047,6 +3051,8 @@ class SelectionDialog(MessageBoxBase):
                         row_opts["format"] = "bestvideo+bestaudio/best"
 
             url, row_opts, _ = force_single_video_download(url, row_opts, video_id)
+            video_sequence += 1
+            row_opts["outtmpl"] = numbered_outtmpl(video_sequence, selected_video_total)
             self._apply_download_dir_to_opts(row_opts)
             tasks.append((title, url, row_opts, thumb))
 
