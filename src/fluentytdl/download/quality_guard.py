@@ -8,6 +8,35 @@ from ..core.config_manager import config_manager
 from ..utils.logger import logger
 
 
+def _available_format_ids(formats_list: list[dict] | None) -> set[str]:
+    if not formats_list:
+        return set()
+    return {
+        str(f.get("format_id") or "").strip()
+        for f in formats_list
+        if isinstance(f, dict) and str(f.get("format_id") or "").strip()
+    }
+
+
+def _has_unavailable_exact_ids(format_ids: list[str] | None, formats_list: list[dict] | None) -> bool:
+    available = _available_format_ids(formats_list)
+    if not format_ids or not available:
+        return False
+    return any(str(fid).strip() not in available for fid in format_ids)
+
+
+def _fallback_format_for_intent(intent: "QualityIntent") -> str:
+    if intent.download_type == "audio_only":
+        return "bestaudio/best"
+    if intent.download_type == "video_only":
+        if intent.target_height:
+            return f"bv*[height<={intent.target_height}]/bestvideo[height<={intent.target_height}]/bestvideo"
+        return "bestvideo[acodec=none]/bestvideo"
+    if intent.target_height:
+        return f"bv*[height<={intent.target_height}]+ba/b[height<={intent.target_height}]"
+    return "bestvideo+bestaudio/best"
+
+
 @dataclass
 class QualityIntent:
     """贯穿下载生命周期的质量目标记录。"""
@@ -244,6 +273,14 @@ def resolve_format_with_guard(
         and "+" not in format_str
     ):
         intent.target_format_ids = [format_str]
+
+    if _has_unavailable_exact_ids(intent.target_format_ids, formats_list):
+        logger.warning(
+            "Quality guard replaced unavailable exact format {} with fallback for {}",
+            format_str,
+            source_path or "download",
+        )
+        format_str = _fallback_format_for_intent(intent)
 
     verdict = None
     if formats_list and intent.target_height is not None:
