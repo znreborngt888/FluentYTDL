@@ -1898,12 +1898,12 @@ class DownloadConfigWindow(FramelessWindow):
             self.preset_combo.addItems(
                 [
                     "最高质量(自动)",
-                    "2160p(严格)",
-                    "1440p(严格)",
-                    "1080p(严格)",
-                    "720p(严格)",
-                    "480p(严格)",
-                    "360p(严格)",
+                    "4K优先",
+                    "2K优先",
+                    "1080p优先",
+                    "720p优先",
+                    "480p优先",
+                    "360p优先",
                 ]
             )
         self.preset_combo.currentIndexChanged.connect(self._on_playlist_preset_changed)
@@ -2312,12 +2312,12 @@ class DownloadConfigWindow(FramelessWindow):
             self.preset_combo.currentText() if self.preset_combo is not None else "最高质量(自动)"
         )
         height_map = {
-            "2160p(严格)": 2160,
-            "1440p(严格)": 1440,
-            "1080p(严格)": 1080,
-            "720p(严格)": 720,
-            "480p(严格)": 480,
-            "360p(严格)": 360,
+            "4K优先": 2160,
+            "2K优先": 1440,
+            "1080p优先": 1080,
+            "720p优先": 720,
+            "480p优先": 480,
+            "360p优先": 360,
         }
         return height_map.get(str(preset_text))
 
@@ -2431,10 +2431,10 @@ class DownloadConfigWindow(FramelessWindow):
             preset_map = {
                 "best_mp4": "最佳画质",
                 "best_raw": "最佳画质(原盘)",
-                "2160p": "2160p",
-                "1440p": "1440p",
-                "1080p": "1080p",
-                "720p": "720p",
+                "2160p": "4K优先",
+                "1440p": "2K优先",
+                "1080p": "1080p优先",
+                "720p": "720p优先",
                 "480p": "480p",
                 "360p": "360p",
                 "best_video": "最佳质量(无声)",
@@ -3741,10 +3741,10 @@ class DownloadConfigWindow(FramelessWindow):
                 preset_map = {
                     "best_mp4": "最佳画质",
                     "best_raw": "最佳画质(原盘)",
-                    "2160p": "2160p",
-                    "1440p": "1440p",
-                    "1080p": "1080p",
-                    "720p": "720p",
+                    "2160p": "4K优先",
+                    "1440p": "2K优先",
+                    "1080p": "1080p优先",
+                    "720p": "720p优先",
                     "480p": "480p",
                     "360p": "360p",
                     "best_video": "最佳质量(无声)",
@@ -3778,22 +3778,26 @@ class DownloadConfigWindow(FramelessWindow):
                     row_opts["extract_audio"] = True
 
                 elif mode == 1:  # Video only
-                    if ov_fid:
+                    h = self._current_playlist_preset_height()
+                    if h:
+                        row_opts["format"] = f"bv*[height<={h}]/bestvideo[height<={h}]/bestvideo"
+                        row_opts["__fluentytdl_format_note"] = f"{h}p优先"
+                    elif ov_fid:
                         row_opts["format"] = ov_fid
                         row_opts["__fluentytdl_format_note"] = (
                             row_data.get("override_text") or "自定义视频"
                         )
                     else:
-                        h = self._current_playlist_preset_height()
-                        if h:
-                            row_opts["format"] = f"bv*[height<={h}]+ba/b[height<={h}]"
-                            row_opts["__fluentytdl_format_note"] = f"{h}p"
-                        else:
-                            row_opts["format"] = "bestvideo+bestaudio/best"
-                            row_opts["__fluentytdl_format_note"] = "最佳画质"
+                        row_opts["format"] = "bestvideo+bestaudio/best"
+                        row_opts["__fluentytdl_format_note"] = "最佳画质"
 
                 else:  # AV Muxed
-                    if ov_fid:
+                    h = self._current_playlist_preset_height()
+                    if h:
+                        row_opts["format"] = f"bv*[height<={h}]+ba/b[height<={h}]"
+                        row_opts["merge_output_format"] = "mkv"
+                        row_opts["__fluentytdl_format_note"] = f"{h}p优先"
+                    elif ov_fid:
                         target_audio = (
                             aud_manual_fid if row_data.get("audio_manual_override") else aud_fid
                         )
@@ -3806,14 +3810,8 @@ class DownloadConfigWindow(FramelessWindow):
                         else:
                             row_opts["format"] = f"{ov_fid}+bestaudio/best"
                     else:
-                        h = self._current_playlist_preset_height()
-                        if h:
-                            row_opts["format"] = f"bv*[height<={h}]+ba/b[height<={h}]"
-                            row_opts["merge_output_format"] = "mkv"
-                            row_opts["__fluentytdl_format_note"] = f"{h}p"
-                        else:
-                            row_opts["format"] = "bestvideo+bestaudio/best"
-                            row_opts["__fluentytdl_format_note"] = "最佳画质"
+                        row_opts["format"] = "bestvideo+bestaudio/best"
+                        row_opts["__fluentytdl_format_note"] = "最佳画质"
 
             # === Apply Common Overrides (Sub/Cover/Meta) ===
 

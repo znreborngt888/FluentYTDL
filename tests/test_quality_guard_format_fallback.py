@@ -38,6 +38,7 @@ quality_guard = importlib.util.module_from_spec(spec)
 sys.modules["fluentytdl.download.quality_guard"] = quality_guard
 spec.loader.exec_module(quality_guard)
 resolve_format_with_guard = quality_guard.resolve_format_with_guard
+soften_exact_format_for_download = quality_guard.soften_exact_format_for_download
 
 
 def test_resolve_format_replaces_unavailable_exact_pair_with_height_fallback():
@@ -99,3 +100,23 @@ def test_resolve_audio_only_replaces_unavailable_exact_audio_with_best_audio():
 
     assert final_format == "bestaudio/best"
     assert intent.target_format_ids == ["140-drc"]
+
+
+def test_soften_exact_format_replaces_persisted_fixed_video_audio_pair():
+    assert (
+        soften_exact_format_for_download("137+140")
+        == "bv*[height<=1080]+ba/b[height<=1080]"
+    )
+    assert (
+        soften_exact_format_for_download(
+            "137+140[language=zh-hans]/137+140[language=en]/137+140"
+        )
+        == "bv*[height<=1080]+ba/b[height<=1080]"
+    )
+
+
+def test_soften_exact_format_preserves_generic_format():
+    assert (
+        soften_exact_format_for_download("bv*[height<=720]+ba/b[height<=720]")
+        == "bv*[height<=720]+ba/b[height<=720]"
+    )

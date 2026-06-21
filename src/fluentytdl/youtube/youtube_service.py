@@ -337,8 +337,15 @@ class YoutubeService:
         if config_manager.get("pot_provider_enabled", False):
             try:
                 from .pot_manager import pot_manager
+                from .pot_startup import ensure_pot_provider_available
 
-                if pot_manager.is_running():
+                pot_ready = ensure_pot_provider_available(
+                    pot_manager,
+                    lambda message: self._emit_log("info", message),
+                    warm_timeout=15,
+                )
+
+                if pot_ready:
                     # 就绪门控：确保 POT 服务已完成预热
                     if not pot_manager.is_warm:
                         self._emit_log(

@@ -236,44 +236,44 @@ class SimplePresetWidget(QWidget):
             # === 分辨率限制 ===
             (
                 "2160p",
-                "📺 2160p 4K (MP4)",
-                "限制最高分辨率为 4K，超高清画质。",
-                "bv*[height<=?2160][ext=mp4]+ba[ext=m4a]/b[height<=?2160][ext=mp4] / bv*[height<=?2160]+ba/best",
+                "📺 4K优先 (MP4)",
+                "最高不超过 4K；达不到时自动降到可用最高画质。",
+                "bv*[height<=2160][ext=mp4]+ba[ext=m4a]/b[height<=2160][ext=mp4] / bv*[height<=2160]+ba/b[height<=2160]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "1440p",
-                "📺 1440p 2K (MP4)",
-                "限制最高分辨率为 2K，高清画质。",
-                "bv*[height<=?1440][ext=mp4]+ba[ext=m4a]/b[height<=?1440][ext=mp4] / bv*[height<=?1440]+ba/best",
+                "📺 2K优先 (MP4)",
+                "最高不超过 2K；达不到时自动降到可用最高画质。",
+                "bv*[height<=1440][ext=mp4]+ba[ext=m4a]/b[height<=1440][ext=mp4] / bv*[height<=1440]+ba/b[height<=1440]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "1080p",
-                "📺 1080p 高清 (MP4)",
-                "限制最高分辨率为 1080p，平衡画质与体积。",
-                "bv*[height<=?1080][ext=mp4]+ba[ext=m4a]/b[height<=?1080][ext=mp4] / bv*[height<=?1080]+ba/best",
+                "📺 1080p优先 (MP4)",
+                "最高不超过 1080p；达不到时自动降到可用最高画质。",
+                "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4] / bv*[height<=1080]+ba/b[height<=1080]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "720p",
-                "📺 720p 标清 (MP4)",
-                "限制最高分辨率为 720p，适合移动设备。",
-                "bv*[height<=?720][ext=mp4]+ba[ext=m4a]/b[height<=?720][ext=mp4] / bv*[height<=?720]+ba/best",
+                "📺 720p优先 (MP4)",
+                "最高不超过 720p；达不到时自动降到可用最高画质。",
+                "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4] / bv*[height<=720]+ba/b[height<=720]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "480p",
                 "📺 480p (MP4)",
                 "限制最高分辨率为 480p，节省空间。",
-                "bv*[height<=?480][ext=mp4]+ba[ext=m4a]/b[height<=?480][ext=mp4] / bv*[height<=?480]+ba/best",
+                "bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4] / bv*[height<=480]+ba/b[height<=480]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "360p",
                 "📺 360p (MP4)",
                 "限制最高分辨率为 360p，最小体积。",
-                "bv*[height<=?360][ext=mp4]+ba[ext=m4a]/b[height<=?360][ext=mp4] / bv*[height<=?360]+ba/best",
+                "bv*[height<=360][ext=mp4]+ba[ext=m4a]/b[height<=360][ext=mp4] / bv*[height<=360]+ba/b[height<=360]",
                 {"merge_output_format": "mp4"},
             ),
             # === 纯音频 ===
@@ -1573,12 +1573,12 @@ class SelectionDialog(MessageBoxBase):
             self.preset_combo.addItems(
                 [
                     "最高质量(自动)",
-                    "2160p(严格)",
-                    "1440p(严格)",
-                    "1080p(严格)",
-                    "720p(严格)",
-                    "480p(严格)",
-                    "360p(严格)",
+                    "4K优先",
+                    "2K优先",
+                    "1080p优先",
+                    "720p优先",
+                    "480p优先",
+                    "360p优先",
                 ]
             )
         self.preset_combo.currentIndexChanged.connect(self._on_playlist_preset_changed)
@@ -1841,12 +1841,12 @@ class SelectionDialog(MessageBoxBase):
             self.preset_combo.currentText() if self.preset_combo is not None else "最高质量(自动)"
         )
         height_map = {
-            "2160p(严格)": 2160,
-            "1440p(严格)": 1440,
-            "1080p(严格)": 1080,
-            "720p(严格)": 720,
-            "480p(严格)": 480,
-            "360p(严格)": 360,
+            "4K优先": 2160,
+            "2K优先": 1440,
+            "1080p优先": 1080,
+            "720p优先": 720,
+            "480p优先": 480,
+            "360p优先": 360,
         }
         return height_map.get(str(preset_text))
 
@@ -3254,12 +3254,12 @@ class SelectionDialog(MessageBoxBase):
                     break
 
         height_map = {
-            "2160p(严格)": 2160,
-            "1440p(严格)": 1440,
-            "1080p(严格)": 1080,
-            "720p(严格)": 720,
-            "480p(严格)": 480,
-            "360p(严格)": 360,
+            "4K优先": 2160,
+            "2K优先": 1440,
+            "1080p优先": 1080,
+            "720p优先": 720,
+            "480p优先": 480,
+            "360p优先": 360,
         }
         preset_height = height_map.get(preset_text)
 
@@ -3401,40 +3401,35 @@ class SelectionDialog(MessageBoxBase):
             elif mode == 1:
                 # video-only
                 override_id = data.get("override_format_id")
-                if override_id:
+                if preset_height:
+                    opts["format"] = (
+                        f"bv*[height<={preset_height}]/"
+                        f"bestvideo[height<={preset_height}]/"
+                        f"bestvideo[acodec=none]/bestvideo"
+                    )
+                    opts["__fluentytdl_quality_height"] = preset_height
+                elif override_id:
                     opts["format"] = str(override_id)
                 else:
-                    if preset_height:
-                        opts["format"] = (
-                            f"bestvideo[height={preset_height}][acodec=none]/"
-                            f"bestvideo[height={preset_height}]/"
-                            f"bestvideo[acodec=none]/bestvideo"
-                        )
-                        opts["__fluentytdl_quality_height"] = preset_height
-                    else:
-                        opts["format"] = "bestvideo[acodec=none]/bestvideo"
+                    opts["format"] = "bestvideo[acodec=none]/bestvideo"
                 # Do not force output container; keep original stream container.
             else:
                 # AV
                 override_id = data.get("override_format_id")
-                if override_id:
+                if preset_height:
+                    opts["format"] = f"bv*[height<={preset_height}]+ba/b[height<={preset_height}]"
+                    opts["__fluentytdl_quality_height"] = preset_height
+                elif override_id:
                     if audio_id_str:
                         opts["format"] = f"{override_id}+{audio_id_str}"
                     else:
                         opts["format"] = f"{override_id}+bestaudio/best"
                 else:
                     # preset mapping
-                    if preset_height:
-                        if audio_id_str:
-                            opts["format"] = f"bestvideo[height={preset_height}]+{audio_id_str}"
-                        else:
-                            opts["format"] = f"bestvideo[height={preset_height}]+bestaudio/best"
-                        opts["__fluentytdl_quality_height"] = preset_height
+                    if audio_id_str:
+                        opts["format"] = f"bestvideo+{audio_id_str}"
                     else:
-                        if audio_id_str:
-                            opts["format"] = f"bestvideo+{audio_id_str}"
-                        else:
-                            opts["format"] = "bestvideo+bestaudio/best"
+                        opts["format"] = "bestvideo+bestaudio/best"
                 # Container policy for assembled streams:
                 # - If video/audio containers are compatible, keep the original video container.
                 # - Otherwise fallback to mkv for compatibility.

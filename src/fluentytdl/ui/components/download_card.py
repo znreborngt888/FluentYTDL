@@ -607,10 +607,9 @@ class DownloadItemCard(CardWidget):
         return ladder[i + 1] if i + 1 < len(ladder) else None
 
     def _apply_height_preset_to_opts(self, height: int) -> None:
-        """Apply strict height preset to yt-dlp format expression."""
+        """Apply a height-capped preset that can downgrade when exact height is unavailable."""
 
-        # Keep it strict (height=), so unavailable will still trigger prompt and ladder.
-        self.opts["format"] = f"bestvideo[height={height}]+bestaudio/best"
+        self.opts["format"] = f"bv*[height<={height}]+ba/b[height<={height}]"
 
     def on_action_clicked(self) -> None:
         if self.worker.isRunning():

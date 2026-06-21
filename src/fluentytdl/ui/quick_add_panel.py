@@ -97,9 +97,10 @@ class QuickAddPanel(QWidget):
 
         self.qualityCombo = ComboBox()
         self.qualityCombo.addItem("最佳 (自动)", userData=None)
-        self.qualityCombo.addItem("4K (2160p)", userData=2160)
-        self.qualityCombo.addItem("1080p", userData=1080)
-        self.qualityCombo.addItem("720p", userData=720)
+        self.qualityCombo.addItem("4K优先", userData=2160)
+        self.qualityCombo.addItem("2K优先", userData=1440)
+        self.qualityCombo.addItem("1080p优先", userData=1080)
+        self.qualityCombo.addItem("720p优先", userData=720)
         row1.addWidget(BodyLabel("画质上限:"), 0)
         row1.addWidget(self.qualityCombo, 1)
 

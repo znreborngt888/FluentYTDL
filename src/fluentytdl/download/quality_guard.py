@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -35,6 +36,48 @@ def _fallback_format_for_intent(intent: "QualityIntent") -> str:
     if intent.target_height:
         return f"bv*[height<={intent.target_height}]+ba/b[height<={intent.target_height}]"
     return "bestvideo+bestaudio/best"
+
+
+_VIDEO_FORMAT_HEIGHTS = {
+    "133": 240,
+    "134": 360,
+    "135": 480,
+    "136": 720,
+    "137": 1080,
+    "160": 144,
+    "242": 240,
+    "243": 360,
+    "244": 480,
+    "247": 720,
+    "248": 1080,
+    "271": 1440,
+    "272": 2160,
+    "298": 720,
+    "299": 1080,
+    "313": 2160,
+    "315": 2160,
+    "398": 720,
+    "399": 1080,
+    "400": 1440,
+    "401": 2160,
+}
+
+
+def soften_exact_format_for_download(format_str: str) -> str:
+    """Convert persisted exact video+audio IDs to a resilient height-bounded selector."""
+    text = str(format_str or "").strip()
+    if not text or text.startswith(("bv", "best")):
+        return format_str
+
+    match = re.search(r"(?<!\d)(\d{2,3})\+\d{2,3}", text)
+    if not match:
+        return format_str
+
+    height = _VIDEO_FORMAT_HEIGHTS.get(match.group(1))
+    if not height:
+        return format_str
+
+    return f"bv*[height<={height}]+ba/b[height<={height}]"
 
 
 @dataclass

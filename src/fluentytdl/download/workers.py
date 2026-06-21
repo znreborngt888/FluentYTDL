@@ -23,6 +23,7 @@ from .features import (
     ThumbnailFeature,
     VRFeature,
 )
+from .quality_guard import soften_exact_format_for_download
 
 
 class DownloadCancelled(Exception):
@@ -496,6 +497,8 @@ class DownloadWorker(QThread):
 
             merged = copy.deepcopy(base_opts)
             merged.update(copy.deepcopy(self.opts))
+            if isinstance(merged.get("format"), str):
+                merged["format"] = soften_exact_format_for_download(merged["format"])
 
             # 保存原始格式选择（用于错误恢复）
             self._original_format = merged.get("format")
