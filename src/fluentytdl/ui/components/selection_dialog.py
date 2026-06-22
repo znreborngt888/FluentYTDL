@@ -238,42 +238,42 @@ class SimplePresetWidget(QWidget):
                 "2160p",
                 "📺 4K优先 (MP4)",
                 "最高不超过 4K；达不到时自动降到可用最高画质。",
-                "bv*[height<=2160][ext=mp4]+ba[ext=m4a]/b[height<=2160][ext=mp4] / bv*[height<=2160]+ba/b[height<=2160]",
+                "bv[height<=2160][ext=mp4]+ba[ext=m4a]/b[height<=2160][ext=mp4] / bv[height<=2160]+ba/b[height<=2160]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "1440p",
                 "📺 2K优先 (MP4)",
                 "最高不超过 2K；达不到时自动降到可用最高画质。",
-                "bv*[height<=1440][ext=mp4]+ba[ext=m4a]/b[height<=1440][ext=mp4] / bv*[height<=1440]+ba/b[height<=1440]",
+                "bv[height<=1440][ext=mp4]+ba[ext=m4a]/b[height<=1440][ext=mp4] / bv[height<=1440]+ba/b[height<=1440]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "1080p",
                 "📺 1080p优先 (MP4)",
                 "最高不超过 1080p；达不到时自动降到可用最高画质。",
-                "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4] / bv*[height<=1080]+ba/b[height<=1080]",
+                "bv[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4] / bv[height<=1080]+ba/b[height<=1080]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "720p",
                 "📺 720p优先 (MP4)",
                 "最高不超过 720p；达不到时自动降到可用最高画质。",
-                "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4] / bv*[height<=720]+ba/b[height<=720]",
+                "bv[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4] / bv[height<=720]+ba/b[height<=720]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "480p",
                 "📺 480p (MP4)",
                 "限制最高分辨率为 480p，节省空间。",
-                "bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4] / bv*[height<=480]+ba/b[height<=480]",
+                "bv[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4] / bv[height<=480]+ba/b[height<=480]",
                 {"merge_output_format": "mp4"},
             ),
             (
                 "360p",
                 "📺 360p (MP4)",
                 "限制最高分辨率为 360p，最小体积。",
-                "bv*[height<=360][ext=mp4]+ba[ext=m4a]/b[height<=360][ext=mp4] / bv*[height<=360]+ba/b[height<=360]",
+                "bv[height<=360][ext=mp4]+ba[ext=m4a]/b[height<=360][ext=mp4] / bv[height<=360]+ba/b[height<=360]",
                 {"merge_output_format": "mp4"},
             ),
             # === 纯音频 ===
@@ -3024,7 +3024,7 @@ class SelectionDialog(MessageBoxBase):
                     # Fallback to preset height constraint
                     h = self._current_playlist_preset_height()
                     if h:
-                        row_opts["format"] = f"bv*[height<={h}]+ba/b[height<={h}]"
+                        row_opts["format"] = f"bv[height<={h}]+ba/b[height<={h}]"
                     else:
                         row_opts["format"] = "bestvideo+bestaudio/best"
 
@@ -3045,7 +3045,7 @@ class SelectionDialog(MessageBoxBase):
                     # Auto based on preset
                     h = self._current_playlist_preset_height()
                     if h:
-                        row_opts["format"] = f"bv*[height<={h}]+ba/b[height<={h}]"
+                        row_opts["format"] = f"bv[height<={h}]+ba/b[height<={h}]"
                         row_opts["merge_output_format"] = "mkv"
                     else:
                         row_opts["format"] = "bestvideo+bestaudio/best"
@@ -3403,7 +3403,7 @@ class SelectionDialog(MessageBoxBase):
                 override_id = data.get("override_format_id")
                 if preset_height:
                     opts["format"] = (
-                        f"bv*[height<={preset_height}]/"
+                        f"bv[height<={preset_height}]/"
                         f"bestvideo[height<={preset_height}]/"
                         f"bestvideo[acodec=none]/bestvideo"
                     )
@@ -3417,7 +3417,7 @@ class SelectionDialog(MessageBoxBase):
                 # AV
                 override_id = data.get("override_format_id")
                 if preset_height:
-                    opts["format"] = f"bv*[height<={preset_height}]+ba/b[height<={preset_height}]"
+                    opts["format"] = f"bv[height<={preset_height}]+ba/b[height<={preset_height}]"
                     opts["__fluentytdl_quality_height"] = preset_height
                 elif override_id:
                     if audio_id_str:

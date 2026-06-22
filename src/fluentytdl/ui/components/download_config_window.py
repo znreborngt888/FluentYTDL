@@ -3780,7 +3780,7 @@ class DownloadConfigWindow(FramelessWindow):
                 elif mode == 1:  # Video only
                     h = self._current_playlist_preset_height()
                     if h:
-                        row_opts["format"] = f"bv*[height<={h}]/bestvideo[height<={h}]/bestvideo"
+                        row_opts["format"] = f"bv[height<={h}]/bestvideo[height<={h}]/bestvideo"
                         row_opts["__fluentytdl_format_note"] = f"{h}p优先"
                     elif ov_fid:
                         row_opts["format"] = ov_fid
@@ -3794,7 +3794,7 @@ class DownloadConfigWindow(FramelessWindow):
                 else:  # AV Muxed
                     h = self._current_playlist_preset_height()
                     if h:
-                        row_opts["format"] = f"bv*[height<={h}]+ba/b[height<={h}]"
+                        row_opts["format"] = f"bv[height<={h}]+ba/b[height<={h}]"
                         row_opts["merge_output_format"] = "mkv"
                         row_opts["__fluentytdl_format_note"] = f"{h}p优先"
                     elif ov_fid:

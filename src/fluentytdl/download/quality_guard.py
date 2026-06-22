@@ -31,10 +31,10 @@ def _fallback_format_for_intent(intent: "QualityIntent") -> str:
         return "bestaudio/best"
     if intent.download_type == "video_only":
         if intent.target_height:
-            return f"bv*[height<={intent.target_height}]/bestvideo[height<={intent.target_height}]/bestvideo"
+            return f"bv[height<={intent.target_height}]/bestvideo[height<={intent.target_height}]/bestvideo"
         return "bestvideo[acodec=none]/bestvideo"
     if intent.target_height:
-        return f"bv*[height<={intent.target_height}]+ba/b[height<={intent.target_height}]"
+        return f"bv[height<={intent.target_height}]+ba/b[height<={intent.target_height}]"
     return "bestvideo+bestaudio/best"
 
 
@@ -77,7 +77,7 @@ def soften_exact_format_for_download(format_str: str) -> str:
     if not height:
         return format_str
 
-    return f"bv*[height<={height}]+ba/b[height<={height}]"
+    return f"bv[height<={height}]+ba/b[height<={height}]"
 
 
 @dataclass

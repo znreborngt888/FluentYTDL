@@ -15,12 +15,12 @@ def quick_params_to_opts(params: QuickDownloadParams) -> dict[str, Any]:
         opts["format"] = "bestaudio/best"
     elif params.download_type == "video_only":
         if params.max_height:
-            opts["format"] = f"bv*[height<={params.max_height}]/bv*"
+            opts["format"] = f"bv[height<={params.max_height}]/bv"
         else:
             opts["format"] = "bestvideo/bv*"
     else:  # video_audio
         if params.max_height:
-            opts["format"] = f"bv*[height<={params.max_height}]+ba/b[height<={params.max_height}]/b"
+            opts["format"] = f"bv[height<={params.max_height}]+ba/b[height<={params.max_height}]/b"
         else:
             opts["format"] = "bv*+ba/b"
 

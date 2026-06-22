@@ -307,13 +307,13 @@ def _inject_language_into_format(fmt: str, format_sort: list | str | None) -> st
 
     Example::
 
-        fmt   = "bv*[height<=1080]+ba[ext=m4a]/b[height<=1080]/bv*[height<=1080]+ba"
+        fmt   = "bv[height<=1080]+ba[ext=m4a]/b[height<=1080]/bv[height<=1080]+ba"
         langs from format_sort = ["ja", "zh-hans"]
-        result = ("bv*[height<=1080]+ba[ext=m4a][language=ja]/b[height<=1080][language=ja]"
-                  "/bv*[height<=1080]+ba[language=ja]"
-                  "/bv*[height<=1080]+ba[ext=m4a][language=zh-hans]/b[height<=1080][language=zh-hans]"
-                  "/bv*[height<=1080]+ba[language=zh-hans]"
-                  "/bv*[height<=1080]+ba[ext=m4a]/b[height<=1080]/bv*[height<=1080]+ba")
+        result = ("bv[height<=1080]+ba[ext=m4a][language=ja]"
+                  "/bv[height<=1080]+ba[language=ja]"
+                  "/bv[height<=1080]+ba[ext=m4a][language=zh-hans]"
+                  "/bv[height<=1080]+ba[language=zh-hans]"
+                  "/bv[height<=1080]+ba[ext=m4a]/b[height<=1080]/bv[height<=1080]+ba")
     """
     if not fmt or not format_sort:
         return fmt
@@ -331,7 +331,15 @@ def _inject_language_into_format(fmt: str, format_sort: list | str | None) -> st
     if not langs:
         return fmt
 
-    alternatives = [a.strip() for a in fmt.split("/") if a.strip()]
+    def prefer_video_only_merge(alt: str) -> str:
+        if "+" not in alt:
+            return alt
+        video_part, audio_part = alt.split("+", 1)
+        if video_part.startswith("bv*"):
+            video_part = "bv" + video_part[3:]
+        return f"{video_part}+{audio_part}"
+
+    alternatives = [prefer_video_only_merge(a.strip()) for a in fmt.split("/") if a.strip()]
     if not alternatives:
         return fmt
 
@@ -343,9 +351,14 @@ def _inject_language_into_format(fmt: str, format_sort: list | str | None) -> st
                 # Merge pattern: video+audio -> add [language=xx] to audio part
                 parts = alt.split("+", 1)
                 lang_alts.append(f"{parts[0]}+{parts[1]}[language={lang}]")
-            else:
-                # Single format (muxed or audio-only) -> append [language=xx]
+            elif alt.startswith(("ba", "bestaudio")):
+                # Audio-only selections may still honor language directly.
                 lang_alts.append(f"{alt}[language={lang}]")
+            else:
+                # Do not language-filter muxed video fallbacks such as
+                # b[height<=2160]. On multi-audio YouTube videos those can
+                # outrank high-resolution video+audio pairs and force 360p.
+                continue
         if lang_alts:
             lang_groups.append("/".join(lang_alts))
 
@@ -353,7 +366,8 @@ def _inject_language_into_format(fmt: str, format_sort: list | str | None) -> st
         return fmt
 
     # Prepend language-filtered alternatives, with original format as fallback
-    return "/".join(lang_groups) + "/" + fmt
+    normalized_fmt = "/".join(alternatives)
+    return "/".join(lang_groups) + "/" + normalized_fmt
 
 
 def ydl_opts_to_cli_args(ydl_opts: dict[str, Any]) -> list[str]:

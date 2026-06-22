@@ -1515,10 +1515,10 @@ def _fallback_global_format_str(override: Any) -> tuple[str, dict]:
         )
     elif download_type == "video_only":
         h = intent.get("max_height")
-        format_str = f"bv*[height<={h}]" if h else "bestvideo/best"
+        format_str = f"bv[height<={h}]" if h else "bestvideo/best"
     else:
         h = intent.get("max_height")
-        format_str = f"bv*[height<={h}]+ba/b[height<={h}]" if h else "bestvideo+bestaudio/best"
+        format_str = f"bv[height<={h}]+ba/b[height<={h}]" if h else "bestvideo+bestaudio/best"
 
     if download_type != "audio_only" and override.container_override:
         opts["merge_output_format"] = override.container_override

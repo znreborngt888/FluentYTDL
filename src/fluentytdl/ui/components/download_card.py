@@ -609,7 +609,7 @@ class DownloadItemCard(CardWidget):
     def _apply_height_preset_to_opts(self, height: int) -> None:
         """Apply a height-capped preset that can downgrade when exact height is unavailable."""
 
-        self.opts["format"] = f"bv*[height<={height}]+ba/b[height<={height}]"
+        self.opts["format"] = f"bv[height<={height}]+ba/b[height<={height}]"
 
     def on_action_clicked(self) -> None:
         if self.worker.isRunning():

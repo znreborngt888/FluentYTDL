@@ -54,6 +54,7 @@ yt_dlp_cli = importlib.util.module_from_spec(spec)
 sys.modules["fluentytdl.youtube.yt_dlp_cli"] = yt_dlp_cli
 spec.loader.exec_module(yt_dlp_cli)
 ydl_opts_to_cli_args = yt_dlp_cli.ydl_opts_to_cli_args
+_inject_language_into_format = yt_dlp_cli._inject_language_into_format
 
 
 def test_ydl_opts_to_cli_args_passes_playlist_items_range():
@@ -74,3 +75,13 @@ def test_ydl_opts_to_cli_args_passes_no_playlist_for_single_video_tasks():
     args = ydl_opts_to_cli_args({"noplaylist": True})
 
     assert "--no-playlist" in args
+
+
+def test_language_injection_does_not_prioritize_low_resolution_muxed_fallback():
+    fmt = "bv*[height<=2160]+ba/b[height<=2160]"
+
+    result = _inject_language_into_format(fmt, ["lang:en", "res"])
+
+    assert result == "bv[height<=2160]+ba[language=en]/bv[height<=2160]+ba/b[height<=2160]"
+    assert "bv*[height<=2160]+ba[language=en]" not in result
+    assert "b[height<=2160][language=en]" not in result
